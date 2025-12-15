@@ -7,6 +7,10 @@ if TYPE_CHECKING:
 import uvicorn
 import csv 
 import os
+import sys
+from datetime import datetime, timedelta
+import pytz
+sys.path.insert(0, os.path.dirname(__file__))
 from dbmodel import Product, User
 from database import Session, engine, Base, AsyncSessionLocal, async_engine
 from model import ProductSchema, UserCreat, Userlogin, ImageResponseModel, Country
@@ -125,4 +129,191 @@ def get_all_users():
     finally:
         db.close()
 
+# Diagnostic endpoint - raw database check
+@app.get('/diagnostic/products')
+def diagnostic_products():
+    db = Session()
+    try:
+        products = db.query(Product).all()
+        diagnostic_list = []
+        for product in products:
+            diagnostic_list.append({
+                "id": product.id,
+                "name": product.name,
+                "description": product.description,
+                "price": product.price,
+                "created_at_raw": str(product.created_at),
+                "created_at_type": str(type(product.created_at)),
+                "created_at_is_none": product.created_at is None
+            })
+        return {
+            "total_products": len(diagnostic_list),
+            "products": diagnostic_list
+        }
+    finally:
+        db.close()
 
+# Get all products
+@app.get('/product')
+def get_products():
+    db = Session()
+    try:
+        products = db.query(Product).order_by(Product.id.asc()).all()
+        product_list = []
+        for product in products:
+            # Debug logging
+            print(f"[DEBUG] Product {product.id}: created_at type={type(product.created_at)}, value={product.created_at}")
+            
+            # Ensure created_at has a value
+            created_at_str = "N/A"
+            if product.created_at:
+                try:
+                    # Convert UTC to Bangladeshi time (UTC+6) by adding 6 hours
+                    bd_time = product.created_at + timedelta(hours=6)
+                    created_at_str = bd_time.strftime("%d/%m/%Y %H:%M:%S")
+                    print(f"[DEBUG] Converted to BD time: {created_at_str}")
+                except Exception as e:
+                    print(f"[ERROR] Failed to format created_at for product {product.id}: {e}")
+                    created_at_str = "Invalid Date"
+            
+            product_data = {
+                "id": product.id,
+                "name": product.name,
+                "description": product.description,
+                "price": product.price,
+                "created_at": created_at_str
+            }
+            product_list.append(product_data)
+        return product_list
+    finally:
+        db.close()
+
+# Update product
+@app.put('/product/{product_id}')
+def update_product(product_id: int, product: ProductSchema):
+    db = Session()
+    try:
+        db_product = db.query(Product).filter(Product.id == product_id).first()
+        if not db_product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        db_product.name = product.name
+        db_product.description = product.description
+        db_product.price = product.price
+        
+        db.commit()
+        db.refresh(db_product)
+        
+        # Convert UTC to Bangladeshi time (UTC+6) by adding 6 hours
+        created_at_str = "N/A"
+        if db_product.created_at:
+            try:
+                bd_time = db_product.created_at + timedelta(hours=6)
+                created_at_str = bd_time.strftime("%d/%m/%Y %H:%M:%S")
+            except Exception as e:
+                print(f"[ERROR] Failed to format created_at for product {product_id}: {e}")
+                created_at_str = "Invalid Date"
+        
+        return {
+            "id": db_product.id,
+            "name": db_product.name,
+            "description": db_product.description,
+            "price": db_product.price,
+            "created_at": created_at_str
+        }
+    finally:
+        db.close()
+
+# Delete product
+@app.delete('/product/{product_id}')
+def delete_product(product_id: int):
+    db = Session()
+    try:
+        db_product = db.query(Product).filter(Product.id == product_id).first()
+        if not db_product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        db.delete(db_product)
+        db.commit()
+        
+        return {"message": "Product deleted successfully"}
+    finally:
+        db.close()
+
+# CSV Upload endpoint
+@app.post('/csv-upload')
+async def upload_csv(file: UploadFile = File(...)):
+    try:
+        contents = await file.read()
+        csv_text = contents.decode('utf-8')
+        
+        reader = csv.DictReader(csv_text.strip().split('\n'))
+        db = Session()
+        success_count = 0
+        error_count = 0
+        
+        try:
+            for row in reader:
+                try:
+                    product = Product(
+                        name=row.get('name') or row.get('Name'),
+                        description=row.get('description') or row.get('Description'),
+                        price=float(row.get('price') or row.get('Price')),
+                        created_at=datetime.utcnow()  # Explicitly set upload timestamp
+                    )
+                    db.add(product)
+                    db.commit()
+                    success_count += 1
+                except Exception as e:
+                    db.rollback()
+                    error_count += 1
+                    print(f"Error importing row: {e}")
+        finally:
+            db.close()
+        
+        return {
+            "success_count": success_count,
+            "error_count": error_count,
+            "message": f"Processed {success_count} products successfully, {error_count} errors"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# Batch upload endpoint (JSON from frontend)
+@app.post('/upload-batch')
+async def upload_batch(data: dict):
+    try:
+        rows = data.get('rows', [])
+        db = Session()
+        success_count = 0
+        error_count = 0
+        
+        try:
+            for row in rows:
+                try:
+                    product = Product(
+                        name=row.get('Name'),
+                        description=row.get('Description'),
+                        price=float(row.get('Price')),
+                        created_at=datetime.utcnow()  # Explicitly set upload timestamp
+                    )
+                    db.add(product)
+                    db.commit()
+                    success_count += 1
+                except Exception as e:
+                    db.rollback()
+                    error_count += 1
+                    print(f"Error importing row: {e}")
+        finally:
+            db.close()
+        
+        return {
+            "success_count": success_count,
+            "error_count": error_count,
+            "message": f"Processed {success_count} products successfully, {error_count} errors"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=8000)

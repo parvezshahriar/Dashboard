@@ -5,11 +5,15 @@ let itemsPerPage = 10;
 
 async function fetchProductsFromDatabase() {
     try {
+        console.log('[FETCH] Starting fetch from http://127.0.0.1:8000/product');
         const response = await fetch('http://127.0.0.1:8000/product');
+        console.log('[FETCH] Response status:', response.status, response.statusText);
+        
         if (!response.ok) {
-            throw new Error(`API error: ${response.status}`);
+            throw new Error(`API error: ${response.status} ${response.statusText}`);
         }
         const products = await response.json();
+        console.log('[FETCH] Received products:', products);
         
         // Add status to each product
         tableData = products.map(product => ({
@@ -17,11 +21,12 @@ async function fetchProductsFromDatabase() {
             status: Math.random() > 0.5 ? 'Approved' : 'In Progress'
         }));
         
-        console.log('Products loaded:', tableData);
+        console.log('[FETCH] Processed tableData:', tableData);
         currentPage = 1; // Reset to first page
         return tableData;
     } catch (error) {
-        console.error('Error fetching products:', error);
+        console.error('[FETCH] Error fetching products:', error);
+        alert('Failed to load products from database. Check browser console.');
         // Fallback to empty array if API fails
         return [];
     }
@@ -52,11 +57,12 @@ function renderTable(data) {
         // Format Currency with BDT symbol (৳)
         const formatMoney = (amount) => amount ? `৳ ${parseFloat(amount).toFixed(2)}` : '';
         
-        // Format timestamp
+        // Format timestamp (backend already formats it in BD timezone)
         const formatDate = (timestamp) => {
             if (!timestamp) return '-';
-            const date = new Date(timestamp);
-            return date.toLocaleDateString('en-GB') + ' ' + date.toLocaleTimeString('en-GB');
+            // Backend already sends formatted string in DD/MM/YYYY HH:MM:SS format
+            // Just return it as-is
+            return timestamp;
         };
 
         const tr = document.createElement('tr');
@@ -200,121 +206,299 @@ async function uploadCSVFile(file) {
             return;
         }
         
-        // Validate CSV structure
-        const isValid = await validateCSVStructure(file);
-        if (!isValid) {
-            return; // Validation error message already shown
-        }
+        console.log('[UPLOAD] Reading file:', file.name);
         
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        console.log('Uploading CSV file:', file.name);
-        
-        const response = await fetch('http://127.0.0.1:8000/csv-upload', {
-            method: 'POST',
-            body: formData
-        });
-        
-        const result = await response.json();
-        console.log('Upload result:', result);
-        
-        if (response.ok) {
-            alert(`✓ Upload successful!\n${result.success_count} products imported\n${result.error_count} errors`);
-            // Clear file input
-            document.getElementById('csv-file-input').value = '';
-            // Refresh the table data
-            await fetchProductsFromDatabase();
-            applyFilters();
-        } else {
-            alert(`✗ Upload failed:\n${result.message || 'Unknown error'}`);
-        }
-    } catch (error) {
-        console.error('Error uploading CSV file:', error);
-        alert('Error uploading file. Please check the console for details.');
-    }
-}
-
-// 6. Validate CSV Structure
-async function validateCSVStructure(file) {
-    return new Promise((resolve) => {
+        // Read and validate CSV
         const reader = new FileReader();
-        
         reader.onload = (e) => {
             try {
                 const csv = e.target.result;
                 const lines = csv.trim().split('\n');
                 
-                if (lines.length < 2) {
-                    alert('✗ Invalid CSV!\nFile must contain at least a header row and one data row');
-                    resolve(false);
+                if (lines.length < 1) {
+                    alert('✗ CSV file is empty');
                     return;
                 }
                 
-                // Parse header row
-                const headerLine = lines[0].trim();
-                const headers = headerLine.split(',').map(h => h.trim().toLowerCase());
+                // Parse CSV
+                const headers = lines[0].split(',').map(h => h.trim());
+                const requiredColumns = ['name', 'description', 'price'];
                 
-                // Required columns
-                const requiredColumns = ['id', 'name', 'description', 'price'];
+                console.log('[UPLOAD] Headers found:', headers);
+                console.log('[UPLOAD] Required columns:', requiredColumns);
                 
-                // Validate column count
-                if (headers.length !== requiredColumns.length) {
-                    alert(`✗ Invalid column count!\nExpected ${requiredColumns.length} columns, found ${headers.length}\nRequired columns: ${requiredColumns.join(', ')}`);
-                    resolve(false);
-                    return;
-                }
-                
-                // Validate column names
-                const missingColumns = [];
-                requiredColumns.forEach(col => {
-                    if (!headers.includes(col)) {
-                        missingColumns.push(col);
-                    }
-                });
+                // Check if required columns exist (case-insensitive)
+                const headersLower = headers.map(h => h.toLowerCase());
+                const missingColumns = requiredColumns.filter(col => !headersLower.includes(col));
                 
                 if (missingColumns.length > 0) {
-                    alert(`✗ Missing required columns!\nMissing: ${missingColumns.join(', ')}\nRequired columns: ${requiredColumns.join(', ')}`);
-                    resolve(false);
+                    alert(`✗ Missing required columns: ${missingColumns.join(', ')}\n\nRequired columns: ${requiredColumns.join(', ')}`);
                     return;
                 }
                 
-                // Validate data rows (sample check)
-                let validRows = 0;
-                for (let i = 1; i < Math.min(lines.length, 6); i++) {
-                    const row = lines[i].trim();
-                    if (row) {
-                        const cols = row.split(',');
-                        if (cols.length === requiredColumns.length) {
-                            validRows++;
-                        }
+                // Get column indices
+                const nameIdx = headersLower.indexOf('name');
+                const descIdx = headersLower.indexOf('description');
+                const priceIdx = headersLower.indexOf('price');
+                
+                // Validate rows
+                let totalRows = 0;
+                let validRows = [];
+                let invalidRows = [];
+                let allRowsWithValidation = []; // Track all rows with validation status
+                
+                for (let i = 1; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (!line) continue; // Skip empty lines
+                    
+                    totalRows++;
+                    const cols = line.split(',').map(c => c.trim());
+                    
+                    // Check if row has enough columns
+                    if (cols.length < Math.max(nameIdx, descIdx, priceIdx) + 1) {
+                        invalidRows.push({
+                            row: i + 1,
+                            reason: 'Not enough columns'
+                        });
+                        allRowsWithValidation.push({
+                            rowNumber: i + 1,
+                            data: cols,
+                            error: 'Not enough columns'
+                        });
+                        continue;
+                    }
+                    
+                    const name = cols[nameIdx];
+                    const description = cols[descIdx];
+                    const price = cols[priceIdx];
+                    
+                    // Validate data
+                    let isValid = true;
+                    let error = '';
+                    
+                    if (!name || name === '') {
+                        isValid = false;
+                        error = 'Missing product name';
+                    } else if (!price || price === '') {
+                        isValid = false;
+                        error = 'Missing price';
+                    } else if (isNaN(parseFloat(price))) {
+                        isValid = false;
+                        error = 'Invalid price (must be numeric)';
+                    } else if (parseFloat(price) <= 0) {
+                        isValid = false;
+                        error = 'Price must be greater than 0';
+                    }
+                    
+                    if (isValid) {
+                        validRows.push({
+                            name: name,
+                            description: description || '',
+                            price: parseFloat(price)
+                        });
+                        allRowsWithValidation.push({
+                            rowNumber: i + 1,
+                            data: cols,
+                            error: 'Valid'
+                        });
+                    } else {
+                        invalidRows.push({
+                            row: i + 1,
+                            reason: error
+                        });
+                        allRowsWithValidation.push({
+                            rowNumber: i + 1,
+                            data: cols,
+                            error: error
+                        });
                     }
                 }
                 
-                if (validRows === 0) {
-                    alert('✗ No valid data rows found!\nEnsure data rows match the header format');
-                    resolve(false);
-                    return;
-                }
+                // Show validation report modal
+                showValidationReport(file.name, totalRows, validRows, invalidRows, allRowsWithValidation, headers);
                 
-                // All validations passed
-                console.log('✓ CSV validation passed');
-                resolve(true);
             } catch (error) {
-                console.error('CSV parsing error:', error);
-                alert('✗ Error reading CSV file:\n' + error.message);
-                resolve(false);
+                console.error('[UPLOAD] Validation error:', error);
+                alert('✗ Error validating CSV file: ' + error.message);
             }
         };
         
-        reader.onerror = () => {
-            alert('✗ Error reading file');
-            resolve(false);
-        };
-        
         reader.readAsText(file);
-    });
+        
+    } catch (error) {
+        console.error('[UPLOAD] Error uploading CSV file:', error);
+        alert('Error uploading file. Please check the console for details.');
+    }
 }
+
+// Show validation report modal
+function showValidationReport(fileName, totalRows, validRows, invalidRows, allRowsWithValidation, headers) {
+    const validCount = validRows.length;
+    const invalidCount = invalidRows.length;
+    
+    console.log('[REPORT] Validation complete:', {
+        fileName,
+        totalRows,
+        validCount,
+        invalidCount
+    });
+    
+    // Store data globally for download function
+    window.reportData = {
+        fileName: fileName,
+        allRowsWithValidation: allRowsWithValidation,
+        headers: headers
+    };
+    
+    // Create modal
+    const modal = document.createElement('div');
+    modal.id = 'validation-modal';
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 10000;
+    `;
+    
+    const today = new Date();
+    const dateStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+    
+    modal.innerHTML = `
+        <div style="background: white; border-radius: 8px; padding: 30px; width: 500px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0; font-size: 18px; color: #333;">CSV Upload Report</h2>
+                <button onclick="document.getElementById('validation-modal').remove()" style="font-size: 24px; color: #999; cursor: pointer; border: none; background: none;">&times;</button>
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <div style="font-size: 14px; color: #555; margin-bottom: 8px;">
+                    <strong>Date:</strong> ${dateStr}
+                </div>
+                <div style="font-size: 14px; color: #555; margin-bottom: 8px;">
+                    <strong>File Name:</strong> ${fileName}
+                </div>
+            </div>
+            
+            <div style="background: #f5f5f5; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
+                <div style="font-size: 14px; color: #333; margin-bottom: 8px;">
+                    <strong>Total Rows:</strong> ${totalRows}
+                </div>
+                <div style="font-size: 14px; color: #27ae60; margin-bottom: 8px;">
+                    <strong>✓ Successfully Processed:</strong> ${validCount}
+                </div>
+                <div style="font-size: 14px; color: #e74c3c; margin-bottom: 8px;">
+                    <strong>✗ Failed To Process:</strong> ${invalidCount}
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button onclick="downloadErrorReport()" style="padding: 10px 20px; background: #1a1a1a; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">Download Report</button>
+                <button 
+                    onclick="processValidRows(${JSON.stringify(validRows).replace(/"/g, '&quot;')})" 
+                    style="padding: 10px 20px; background: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
+                    Process ${validCount} Valid Rows
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+}
+
+// Download Error Report as CSV
+function downloadErrorReport() {
+    if (!window.reportData) {
+        alert('Error: Report data not found. Please try uploading again.');
+        return;
+    }
+    
+    const { fileName, allRowsWithValidation, headers } = window.reportData;
+    
+    console.log('[DOWNLOAD] Creating error report CSV');
+    
+    // Create CSV content with ID + original headers + two validation columns
+    const csvHeaders = ['ID', ...headers, 'Validation Status', 'Reason'];
+    const csvRows = [csvHeaders.join(',')];
+    
+    // Add data rows with row number as ID + validation status and reason
+    allRowsWithValidation.forEach(row => {
+        const isValid = row.error === 'Valid';
+        const status = isValid ? 'Valid' : 'Invalid';
+        const reason = isValid ? '' : row.error;
+        const dataRow = [row.rowNumber, ...row.data, status, reason ? `"${reason}"` : ''];
+        csvRows.push(dataRow.join(','));
+    });
+    
+    const csvContent = csvRows.join('\n');
+    
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().split('T')[0];
+    const baseFileName = fileName.replace('.csv', '');
+    const downloadFileName = `${baseFileName}_error_report_${timestamp}.csv`;
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', downloadFileName);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    console.log('[DOWNLOAD] Error report downloaded:', downloadFileName);
+}
+async function processValidRows(validRows) {
+    try {
+        console.log('[PROCESS] Processing', validRows.length, 'valid rows');
+        
+        const response = await fetch('http://127.0.0.1:8000/upload-batch', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                rows: validRows,
+                totalValid: validRows.length,
+                totalInvalid: 0,
+                timestamp: new Date().toISOString()
+            })
+        });
+        
+        const result = await response.json();
+        console.log('[PROCESS] Result:', result);
+        
+        // Remove modal
+        const modal = document.getElementById('validation-modal');
+        if (modal) modal.remove();
+        
+        if (response.ok) {
+            alert(`Successfully processed:\n${result.success_count} products imported`);
+            // Clear file input
+            const fileInput = document.getElementById('csv-file-input');
+            if (fileInput) fileInput.value = '';
+            // Refresh the table data
+            await fetchProductsFromDatabase();
+            applyFilters();
+        } else {
+            alert(`Failed to process:\n${result.message || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('[PROCESS] Error:', error);
+        alert('Error processing rows. Please check the console.');
+    }
+}
+
+// 6. Validate CSV Structure
 
 // 5. Apply all filters together
 function applyFilters() {
@@ -348,7 +532,14 @@ function applyFilters() {
         filteredData = filteredData.filter(product => {
             if (!product.created_at) return false;
             
-            const productDate = new Date(product.created_at);
+            // Parse backend formatted date: "DD/MM/YYYY HH:MM:SS"
+            const parts = product.created_at.split(' ');
+            if (parts.length < 1) return false;
+            
+            const dateParts = parts[0].split('/');
+            if (dateParts.length !== 3) return false;
+            
+            const productDate = new Date(dateParts[2], dateParts[1] - 1, dateParts[0]);
             return productDate >= startDate && productDate <= endDate;
         });
     }
@@ -384,12 +575,12 @@ async function saveProductChanges() {
     
     // Validate fields
     if (!name || !price) {
-        alert('✗ Please fill in all required fields (Name and Price)');
+        alert('Please fill in all required fields (Name and Price)');
         return;
     }
     
     if (isNaN(parseFloat(price)) || parseFloat(price) < 0) {
-        alert('✗ Invalid price value');
+        alert('Invalid price value');
         return;
     }
     
@@ -413,7 +604,7 @@ async function saveProductChanges() {
         console.log('Update response:', result);
         
         if (response.ok) {
-            alert(`✓ Product updated successfully!`);
+            alert(`Product updated successfully!`);
             closeEditModal();
             
             // Update the product in tableData in-place using map()
@@ -435,11 +626,11 @@ async function saveProductChanges() {
             // Refresh the current view without resetting page
             refreshTableKeepPage();
         } else {
-            alert(`✗ Update failed:\n${result.detail || 'Unknown error'}`);
+            alert(`Update failed:\n${result.detail || 'Unknown error'}`);
         }
     } catch (error) {
         console.error('Error updating product:', error);
-        alert('✗ Error updating product. Please check the console for details.');
+        alert('Error updating product. Please check the console for details.');
     }
 }
 
@@ -461,16 +652,16 @@ async function deleteProduct(id) {
         console.log('Delete response:', result);
         
         if (response.ok) {
-            alert(`✓ Product deleted successfully!`);
+            alert(`Product deleted successfully!`);
             // Refresh table and maintain filters
             await fetchProductsFromDatabase();
             applyFilters();
         } else {
-            alert(`✗ Delete failed:\n${result.detail || 'Unknown error'}`);
+            alert(`Delete failed:\n${result.detail || 'Unknown error'}`);
         }
     } catch (error) {
         console.error('Error deleting product:', error);
-        alert('✗ Error deleting product. Please check the console for details.');
+        alert('Error deleting product. Please check the console for details.');
     }
 }
 
