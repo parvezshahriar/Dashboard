@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 
+
 class ProductSchema(BaseModel):
     id: Optional[int] = None
     name: str
@@ -12,34 +13,21 @@ class ProductSchema(BaseModel):
     class Config:
         from_attributes = True
 
-class UserCreat(BaseModel):
+
+class UserCreate(BaseModel):
+    """Schema for user registration"""
     username: str
     password: str
+    role: Optional[str] = 'user'
 
     class Config:
         from_attributes = True
 
-class Userlogin(BaseModel):
-    id: Optional[int] = None
+
+class UserLogin(BaseModel):
+    """Schema for user login"""
     username: str
     password: str
-        
-    class Config:
-        from_attributes = True
-
-class ImageResponseModel(BaseModel):
-    id: Optional[int] = None
-    filename: str
-    filepath: str
-    url: Optional[str] = None
-
-    class Config:
-        from_attributes = True
-
-class Country(BaseModel):
-    id: Optional[int] = None
-    name: str
-    code: Optional[str] = None
 
     class Config:
         from_attributes = True

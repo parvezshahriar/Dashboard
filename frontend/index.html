@@ -45,8 +45,10 @@
                     <!-- <span class="badge">15</span> -->
                 </div>
                 <div class="user-profile">
-                    <!-- <img src="https://via.placeholder.com/32" alt="User">
-                    <span>Karim Biswas <i class="fa-solid fa-chevron-down"></i></span> -->
+                    <span id="username-display" style="margin-right: 15px;"></span>
+                    <button id="logout-btn" class="logout-btn" onclick="handleLogout()">
+                        <i class="fa-solid fa-sign-out-alt"></i> Logout
+                    </button>
                 </div>
             </div>
         </header>
@@ -59,6 +61,9 @@
             <div class="date-group">
                 <label>END DATE</label>
                 <input id="end-date" type="date">
+            </div>
+            <div class="date-group">
+                <button onclick="resetDateFilter()" class="reset-date-btn">Reset Date</button>
             </div>
         </section>
 

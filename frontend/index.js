@@ -3,10 +3,88 @@ let tableData = [];
 let currentPage = 1;
 let itemsPerPage = 10;
 
+// Logout function
+function handleLogout() {
+    // Clear localStorage
+    localStorage.removeItem('userId');
+    localStorage.removeItem('username');
+    localStorage.removeItem('userRole');
+    
+    console.log('[LOGOUT] User logged out');
+    
+    // Redirect to login page
+    window.location.href = 'login.html';
+}
+
+// RBAC Helper - Check user role
+function getUserRole() {
+    return localStorage.getItem('userRole') || 'guest';
+}
+
+function getUserId() {
+    return localStorage.getItem('userId') || null;
+}
+
+function hasPermission(requiredPermission) {
+    const role = getUserRole();
+    const permissions = {
+        'admin': ['view', 'create', 'edit', 'delete', 'csv'],
+        'manager': ['view', 'edit', 'csv'],
+        'user': ['view'],
+        'guest': []
+    };
+    
+    return permissions[role] && permissions[role].includes(requiredPermission);
+}
+
+// RBAC - Update UI based on user role
+function updateUIBasedOnRole() {
+    const userRole = getUserRole();
+    const userId = getUserId();
+    
+    console.log('[RBAC] User role:', userRole, 'User ID:', userId);
+    
+    // Hide/Show features based on role
+    if (userRole === 'admin') {
+        // Admin sees everything
+        document.querySelectorAll('[data-permission="create"]').forEach(el => el.style.display = 'block');
+        document.querySelectorAll('[data-permission="edit"]').forEach(el => el.style.display = 'inline');
+        document.querySelectorAll('[data-permission="delete"]').forEach(el => el.style.display = 'inline');
+        document.querySelectorAll('[data-permission="csv"]').forEach(el => el.style.display = 'block');
+        // Show all action buttons for admin
+        document.querySelectorAll('.action-edit').forEach(el => el.style.display = 'inline');
+        document.querySelectorAll('.action-delete').forEach(el => el.style.display = 'inline');
+        document.querySelectorAll('.action-download').forEach(el => el.style.display = 'inline');
+    } else if (userRole === 'manager') {
+        // Manager sees edit and CSV
+        document.querySelectorAll('[data-permission="create"]').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('[data-permission="edit"]').forEach(el => el.style.display = 'inline');
+        document.querySelectorAll('[data-permission="delete"]').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('[data-permission="csv"]').forEach(el => el.style.display = 'block');
+        // Show edit button only for manager
+        document.querySelectorAll('.action-edit').forEach(el => el.style.display = 'inline');
+        document.querySelectorAll('.action-delete').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('.action-download').forEach(el => el.style.display = 'none');
+    } else if (userRole === 'user') {
+        // User sees only view
+        document.querySelectorAll('[data-permission="create"]').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('[data-permission="edit"]').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('[data-permission="delete"]').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('[data-permission="csv"]').forEach(el => el.style.display = 'none');
+        // Hide all action buttons for user (view-only)
+        document.querySelectorAll('.action-edit').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('.action-delete').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('.action-download').forEach(el => el.style.display = 'none');
+    }
+}
+
 async function fetchProductsFromDatabase() {
     try {
-        console.log('[FETCH] Starting fetch from http://127.0.0.1:8000/product');
-        const response = await fetch('http://127.0.0.1:8000/product');
+        const userId = getUserId();
+        const url = userId ? `http://127.0.0.1:8000/product?user_id=${userId}` : 'http://127.0.0.1:8000/product';
+        
+        console.log('[FETCH] Starting fetch from', url);
+        const response = await fetch(url);
         console.log('[FETCH] Response status:', response.status, response.statusText);
         
         if (!response.ok) {
@@ -67,6 +145,26 @@ function renderTable(data) {
 
         const tr = document.createElement('tr');
         
+        // Get user role to determine button visibility
+        const userRole = getUserRole();
+        let editDisplay = 'none';
+        let deleteDisplay = 'none';
+        let downloadDisplay = 'none';
+        
+        if (userRole === 'admin') {
+            editDisplay = 'inline';
+            deleteDisplay = 'inline';
+            downloadDisplay = 'inline';
+        } else if (userRole === 'manager') {
+            editDisplay = 'inline';
+            deleteDisplay = 'none';
+            downloadDisplay = 'none';
+        } else if (userRole === 'user') {
+            editDisplay = 'none';
+            deleteDisplay = 'none';
+            downloadDisplay = 'none';
+        }
+        
         tr.innerHTML = `
             <td>${row.id}</td>
             <td>${row.name}</td>
@@ -79,9 +177,9 @@ function renderTable(data) {
                 </span>
             </td>
             <td class="actions">
-                <i class="fa-regular fa-pen-to-square" title="Edit" onclick="openEditModal(${row.id}, '${row.name.replace(/'/g, "\\'")}', '${(row.description || '').replace(/'/g, "\\'")}', ${row.price})" style="cursor:pointer;"></i>
-                <i class="fa-regular fa-trash-can" title="Delete" onclick="deleteProduct(${row.id})" style="cursor:pointer;"></i>
-                <i class="fa-solid fa-download" title="Download"></i>
+                <i class="fa-regular fa-pen-to-square action-edit" title="Edit" onclick="openEditModal(${row.id}, '${row.name.replace(/'/g, "\\'")}', '${(row.description || '').replace(/'/g, "\\'")}', ${row.price})" style="cursor:pointer; display:${editDisplay};"></i>
+                <i class="fa-regular fa-trash-can action-delete" title="Delete" onclick="deleteProduct(${row.id})" style="cursor:pointer; display:${deleteDisplay};"></i>
+                <i class="fa-solid fa-download action-download" title="Download" style="display:${downloadDisplay};"></i>
             </td>
         `;
 
@@ -108,7 +206,7 @@ function updatePaginationControls(totalPages) {
     prevBtn.onclick = () => {
         if (currentPage > 1) {
             currentPage--;
-            renderTable(tableData);
+            applyFilters();
         }
     };
     paginationContainer.appendChild(prevBtn);
@@ -121,7 +219,7 @@ function updatePaginationControls(totalPages) {
         pageNum.style.cursor = 'pointer';
         pageNum.onclick = () => {
             currentPage = i;
-            renderTable(tableData);
+            applyFilters();
         };
         paginationContainer.appendChild(pageNum);
     }
@@ -134,7 +232,7 @@ function updatePaginationControls(totalPages) {
     nextBtn.onclick = () => {
         if (currentPage < totalPages) {
             currentPage++;
-            renderTable(tableData);
+            applyFilters();
         }
     };
     paginationContainer.appendChild(nextBtn);
@@ -142,6 +240,25 @@ function updatePaginationControls(totalPages) {
 
 // 4. Initialize
 document.addEventListener('DOMContentLoaded', async () => {
+    // Check if user is logged in
+    const userId = getUserId();
+    const username = localStorage.getItem('username');
+    
+    if (!userId || !username) {
+        // Redirect to login if not logged in
+        window.location.href = 'login.html';
+        return;
+    }
+    
+    // Display username in header
+    const usernameDisplay = document.getElementById('username-display');
+    if (usernameDisplay) {
+        usernameDisplay.textContent = `Welcome, ${username}`;
+    }
+    
+    // Update UI based on user role first
+    updateUIBasedOnRole();
+    
     await fetchProductsFromDatabase();
     renderTable(tableData);
     
@@ -200,6 +317,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 // 5. Upload CSV File to Database
 async function uploadCSVFile(file) {
     try {
+        // Check permission
+        if (!hasPermission('csv')) {
+            alert('❌ You do not have permission to upload CSV files');
+            return;
+        }
+        
         // Validate file type
         if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
             alert('✗ Invalid file type!\nPlease upload a CSV file (.csv)');
@@ -459,9 +582,16 @@ function downloadErrorReport() {
 }
 async function processValidRows(validRows) {
     try {
+        // Check permission
+        if (!hasPermission('csv')) {
+            alert('❌ You do not have permission to process CSV data');
+            return;
+        }
+        
         console.log('[PROCESS] Processing', validRows.length, 'valid rows');
         
-        const response = await fetch('http://127.0.0.1:8000/upload-batch', {
+        const userId = getUserId();
+        const response = await fetch(`http://127.0.0.1:8000/upload-batch?user_id=${userId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -518,33 +648,79 @@ function applyFilters() {
         });
     }
     
-    // Apply date filter (only if dates are set)
+    // Apply date filter (only if both dates are set)
     const startDateInput = document.getElementById('start-date');
     const endDateInput = document.getElementById('end-date');
     
     if (startDateInput && endDateInput && startDateInput.value && endDateInput.value) {
-        const startDate = new Date(startDateInput.value);
-        const endDate = new Date(endDateInput.value);
+        // Parse input dates (format: YYYY-MM-DD from input type="date")
+        const [startYear, startMonth, startDay] = startDateInput.value.split('-').map(Number);
+        const [endYear, endMonth, endDay] = endDateInput.value.split('-').map(Number);
         
-        // Set end date to end of day
-        endDate.setHours(23, 59, 59, 999);
+        const startDate = new Date(startYear, startMonth - 1, startDay, 0, 0, 0, 0);
+        const endDate = new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999);
+        
+        console.log('[DATE FILTER] Input dates:', {
+            startInput: startDateInput.value,
+            endInput: endDateInput.value,
+            startDate: startDate.toISOString(),
+            endDate: endDate.toISOString()
+        });
         
         filteredData = filteredData.filter(product => {
-            if (!product.created_at) return false;
+            if (!product.created_at) {
+                console.log('[DATE FILTER] No created_at for product:', product.id);
+                return false;
+            }
             
             // Parse backend formatted date: "DD/MM/YYYY HH:MM:SS"
-            const parts = product.created_at.split(' ');
-            if (parts.length < 1) return false;
+            const dateParts = product.created_at.split(' ')[0].split('/');
             
-            const dateParts = parts[0].split('/');
-            if (dateParts.length !== 3) return false;
+            if (dateParts.length !== 3) {
+                console.warn('[DATE FILTER] Invalid date format:', product.created_at);
+                return false;
+            }
             
-            const productDate = new Date(dateParts[2], dateParts[1] - 1, dateParts[0]);
-            return productDate >= startDate && productDate <= endDate;
+            const day = parseInt(dateParts[0], 10);
+            const month = parseInt(dateParts[1], 10);
+            const year = parseInt(dateParts[2], 10);
+            
+            const productDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+            
+            const isInRange = productDate >= startDate && productDate <= endDate;
+            
+            console.log('[DATE FILTER] Product check:', {
+                id: product.id,
+                original: product.created_at,
+                parsed: {day, month, year},
+                dateObj: productDate.toISOString(),
+                inRange: isInRange
+            });
+            
+            return isInRange;
         });
+        
+        console.log('[DATE FILTER] Results:', filteredData.length, 'products match date range');
+    } else {
+        console.log('[DATE FILTER] Skipped - missing date inputs');
     }
     
     renderTable(filteredData);
+}
+
+// Reset Date Filter Function
+function resetDateFilter() {
+    const startDateInput = document.getElementById('start-date');
+    const endDateInput = document.getElementById('end-date');
+    
+    // Clear the date inputs
+    if (startDateInput) startDateInput.value = '';
+    if (endDateInput) endDateInput.value = '';
+    
+    // Reset pagination and reapply filters
+    currentPage = 1;
+    applyFilters();
+    console.log('[FILTER] Date filter reset');
 }
 
 // 7. Edit Modal Functions
@@ -584,10 +760,17 @@ async function saveProductChanges() {
         return;
     }
     
+    // Check permission
+    if (!hasPermission('edit')) {
+        alert('❌ You do not have permission to edit products');
+        return;
+    }
+    
     try {
+        const userId = getUserId();
         console.log('Saving product:', { id, name, description, price });
         
-        const response = await fetch(`http://127.0.0.1:8000/product/${id}`, {
+        const response = await fetch(`http://127.0.0.1:8000/product/${id}?user_id=${userId}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
@@ -641,10 +824,17 @@ async function deleteProduct(id) {
         return;
     }
     
+    // Check permission
+    if (!hasPermission('delete')) {
+        alert('❌ You do not have permission to delete products');
+        return;
+    }
+    
     try {
+        const userId = getUserId();
         console.log('Deleting product:', id);
         
-        const response = await fetch(`http://127.0.0.1:8000/product/${id}`, {
+        const response = await fetch(`http://127.0.0.1:8000/product/${id}?user_id=${userId}`, {
             method: 'DELETE'
         });
         
