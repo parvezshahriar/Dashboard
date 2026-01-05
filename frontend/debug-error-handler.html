@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Error Handler</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="error-handler.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .subtitle {
+            color: #999;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .debug-section {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .debug-section h3 {
+            color: #495057;
+            font-size: 14px;
+            margin-bottom: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .debug-info {
+            background: white;
+            border-left: 3px solid #667eea;
+            padding: 10px 12px;
+            margin: 8px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #333;
+            border-radius: 3px;
+        }
+        .status-ok { background-color: #d4edda; color: #155724; border-left-color: #28a745; }
+        .status-error { background-color: #f8d7da; color: #721c24; border-left-color: #dc3545; }
+        .status-pending { background-color: #fff3cd; color: #856404; border-left-color: #ffc107; }
+        button {
+            display: block;
+            width: 100%;
+            padding: 12px 20px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            color: white;
+            transition: all 0.3s;
+        }
+        .btn-primary { background: #667eea; }
+        .btn-primary:hover { background: #5568d3; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102,126,234,0.4); }
+        .btn-secondary { background: #6c757d; }
+        .btn-secondary:hover { background: #5a6268; }
+        .console {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 10px;
+            line-height: 1.5;
+        }
+        .console-line { margin: 2px 0; }
+        .console-log { color: #d4d4d4; }
+        .console-error { color: #f48771; }
+        .console-success { color: #89d185; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐛 Error Handler Debug</h1>
+        <p class="subtitle">System Status & Testing</p>
+
+        <div class="debug-section">
+            <h3>System Status</h3>
+            <div class="debug-info status-pending">DOM Status: <span id="dom-status">Checking...</span></div>
+            <div class="debug-info status-pending">Popup Element: <span id="popup-status">Checking...</span></div>
+            <div class="debug-info status-pending">Error Handler JS: <span id="js-status">Checking...</span></div>
+            <div class="debug-info status-pending">Error Handler CSS: <span id="css-status">Checking...</span></div>
+        </div>
+
+        <div class="debug-section">
+            <h3>Test Actions</h3>
+            <button class="btn-primary" onclick="testErrorDisplay()">Test: Show Error Popup</button>
+            <button class="btn-primary" onclick="testSuccessDisplay()">Test: Show Success Popup</button>
+            <button class="btn-primary" onclick="inspectPopup()">Inspect: Check Popup DOM</button>
+            <button class="btn-secondary" onclick="clearConsole()">Clear Console</button>
+        </div>
+
+        <div class="debug-section">
+            <h3>Console Output</h3>
+            <div class="console" id="console"></div>
+        </div>
+    </div>
+
+    <!-- Load error handler before custom scripts -->
+    <script src="error-handler.js"></script>
+    
+    <script>
+        // Console redirection
+        const consoleEl = document.getElementById('console');
+        const originalLog = console.log;
+        const originalError = console.error;
+        
+        function logToConsole(type, ...args) {
+            const line = document.createElement('div');
+            line.className = `console-line console-${type}`;
+            line.textContent = `[${type.toUpperCase()}] ${args.join(' ')}`;
+            consoleEl.appendChild(line);
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+        
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            logToConsole('log', ...args);
+        };
+        
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            logToConsole('error', ...args);
+        };
+
+        // Status check function
+        function checkStatus() {
+            // DOM Status
+            document.getElementById('dom-status').textContent = document.readyState;
+            
+            // Popup element status
+            const popup = document.getElementById('error-popup');
+            document.getElementById('popup-status').textContent = popup ? '✓ Found' : '✗ Not found (will be created on first use)';
+            document.getElementById('popup-status').parentElement.className = 'debug-info ' + (popup ? 'status-ok' : 'status-pending');
+            
+            // JS status
+            document.getElementById('js-status').textContent = typeof showError === 'function' ? '✓ Loaded' : '✗ Not loaded';
+            document.getElementById('js-status').parentElement.className = 'debug-info ' + (typeof showError === 'function' ? 'status-ok' : 'status-error');
+            
+            // CSS status
+            const cssLink = document.querySelector('link[href="error-handler.css"]');
+            document.getElementById('css-status').textContent = cssLink ? '✓ Linked' : '✗ Not linked';
+            document.getElementById('css-status').parentElement.className = 'debug-info ' + (cssLink ? 'status-ok' : 'status-error');
+        }
+
+        function testErrorDisplay() {
+            console.log('Testing error display...');
+            showError('INVALID_CREDENTIALS', 'This is a test error message');
+        }
+
+        function testSuccessDisplay() {
+            console.log('Testing success display...');
+            showError('UPDATE_FAILED', 'This is a test success message!', true);
+        }
+
+        function inspectPopup() {
+            console.log('Inspecting popup element...');
+            const popup = document.getElementById('error-popup');
+            if (popup) {
+                console.log('✓ Popup element exists');
+                console.log('Popup classes:', popup.className);
+                console.log('Popup computed style visibility:', window.getComputedStyle(popup).visibility);
+                console.log('Popup computed style opacity:', window.getComputedStyle(popup).opacity);
+                console.log('Popup has show class:', popup.classList.contains('show'));
+            } else {
+                console.error('✗ Popup element not found');
+            }
+        }
+
+        function clearConsole() {
+            consoleEl.innerHTML = '';
+        }
+
+        // Run checks on load
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('Document ready - running status checks');
+            checkStatus();
+        });
+
+        // Also check immediately if DOM is ready
+        if (document.readyState !== 'loading') {
+            console.log('DOM already loaded - checking status immediately');
+            checkStatus();
+        }
+    </script>
+</body>
+</html>

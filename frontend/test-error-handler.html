@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Error Handler</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="error-handler.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 500px;
+            margin: 0 auto;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-top: 0;
+        }
+        button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            color: white;
+            transition: all 0.2s;
+        }
+        .btn-error { background: #ff6b6b; }
+        .btn-error:hover { background: #ee5a52; }
+        .btn-success { background: #4caf50; }
+        .btn-success:hover { background: #45a049; }
+        .btn-server { background: #2196f3; }
+        .btn-server:hover { background: #0b7dda; }
+        p {
+            color: #666;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 Error Handler Test</h1>
+        <p>Click the buttons below to test the error handler popup:</p>
+        
+        <button class="btn-error" onclick="showError('INVALID_CREDENTIALS', 'Test: Invalid username or password')">
+            Test Error Message
+        </button>
+        
+        <button class="btn-error" onclick="showError('ACCOUNT_DEACTIVATED', 'Test: Your account has been deactivated. Please contact administrator.')">
+            Test Deactivated Account
+        </button>
+        
+        <button class="btn-success" onclick="showError('UPDATE_FAILED', 'Test: User status updated successfully!', true)">
+            Test Success Message
+        </button>
+        
+        <button class="btn-server" onclick="showError('SERVER_NOT_CONNECTED', 'Test: Cannot connect to server')">
+            Test Server Error
+        </button>
+
+        <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+        
+        <p><strong>Instructions:</strong></p>
+        <ul style="margin: 0; padding-left: 20px;">
+            <li>Click any button to display the error popup</li>
+            <li>You should see a styled popup with the error message</li>
+            <li>Click "Close" button or the X to dismiss</li>
+            <li>Check browser console (F12) for debug logs</li>
+        </ul>
+    </div>
+
+    <script src="error-handler.js"></script>
+</body>
+</html>

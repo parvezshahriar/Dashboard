@@ -6,6 +6,7 @@
     <title>Nagad Login</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="login.css">
+    <link rel="stylesheet" href="error-handler.css">
 </head>
 <body>
 
@@ -13,7 +14,7 @@
 
     <div class="login-container">
         <div class="logo-section">
-            <img src="C:\Users\shahriar.shaon\Desktop\Dashboard\frontend\Untitled design (1).png" alt="" class="logo">
+            <img src="Untitled design (1).png" alt="Logo" class="logo">
         </div>
 
         <form class="login-form" id="loginForm" onsubmit="handleLogin(event)">
@@ -40,44 +41,122 @@
         </form>
     </div>
 
+    <script src="error-handler.js"></script>
     <script>
+        // Custom redirect function for login success
+        function showLoginSuccess(username, role) {
+            console.log('[LOGIN] showLoginSuccess called with username:', username, 'role:', role);
+            showError('INVALID_CREDENTIALS', `Welcome ${username}! You have been logged in successfully.`, true);
+            console.log('[LOGIN] Success popup displayed, will redirect in 2.5 seconds');
+            
+            const timer = setTimeout(() => {
+                console.log('[LOGIN] Timeout triggered, redirecting now');
+                // Route admin users to dashboard, others to index
+                if (role === 'admin') {
+                    console.log('[LOGIN] Admin user detected, routing to admin-dashboard.html');
+                    window.location.href = 'admin-dashboard.html';
+                } else {
+                    console.log('[LOGIN] Regular user detected, routing to index.html');
+                    window.location.href = 'index.html';
+                }
+            }, 2500);
+            
+            console.log('[LOGIN] Timer ID:', timer);
+        }
+        
         async function handleLogin(event) {
             event.preventDefault();
-            
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            
-            console.log('[LOGIN] Attempting login for user:', username);
+            console.log('[LOGIN] handleLogin called');
             
             try {
+                // Step 1: Validate input fields
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+                
+                if (!username) {
+                    showError('VALIDATION_FAILED', 'Username is required');
+                    return;
+                }
+                
+                if (!password) {
+                    showError('VALIDATION_FAILED', 'Password is required');
+                    return;
+                }
+                
+                console.log('[LOGIN] Step 1: Input validation passed');
+                
+                // Step 2: Prepare request
+                const requestBody = {
+                    username: username,
+                    password: password
+                };
+                console.log('[LOGIN] Step 2: Request prepared');
+                
+                // Step 3: Send login request
                 const response = await fetch('http://127.0.0.1:8000/login', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        username: username,
-                        password: password
-                    })
+                    body: JSON.stringify(requestBody)
                 });
                 
-                const result = await response.json();
-                console.log('[LOGIN] Response:', result);
+                console.log('[LOGIN] Step 3: Request sent, status:', response.status);
                 
+                // Step 4: Parse response
+                const result = await response.json();
+                console.log('[LOGIN] Step 4: Response parsed');
+                
+                // Step 5: Check response status
                 if (response.ok) {
-                    console.log('[LOGIN] Login successful for user:', result.username);
-                    // Store user info in localStorage
-                    localStorage.setItem('userId', result.id);
+                    // Step 6: Validate response data
+                    if (!result.user_id || !result.username || !result.role) {
+                        showError('UNKNOWN_ERROR', 'Invalid response from server: missing user data');
+                        return;
+                    }
+                    
+                    console.log('[LOGIN] Step 5-6: Response validated, login successful');
+                    
+                    // Step 7: Store user info
+                    localStorage.setItem('userId', result.user_id);
                     localStorage.setItem('username', result.username);
-                    localStorage.setItem('userRole', result.role);  // Store user role for RBAC
-                    // Redirect to dashboard immediately
-                    window.location.href = 'index.html';
+                    localStorage.setItem('userRole', result.role);
+                    console.log('[LOGIN] Step 7: User data stored in localStorage');
+                    
+                    // Step 8-9: Show success popup and redirect
+                    console.log('[LOGIN] Step 8-9: Showing success popup and preparing redirect');
+                    showLoginSuccess(result.username, result.role);
                 } else {
-                    alert(`Login failed: ${result.detail || 'Invalid credentials'}`);
+                    // Step 5: Handle error responses
+                    console.log('[LOGIN] Step 5: Error response received');
+                    
+                    if (response.status === 403) {
+                        // Account deactivated
+                        showError('ACCOUNT_DEACTIVATED', result.detail || 'Your account has been deactivated. Please contact the administrator.');
+                    } else if (response.status === 401) {
+                        // Invalid credentials
+                        showError('INVALID_CREDENTIALS', result.detail || 'Invalid username or password');
+                    } else if (response.status === 400) {
+                        // Bad request
+                        showError('VALIDATION_FAILED', result.detail || 'Invalid input provided');
+                    } else if (response.status >= 500) {
+                        // Server error
+                        showError('SERVER_NOT_CONNECTED', 'Server error occurred. Please try again later.');
+                    } else {
+                        // Unknown error
+                        showError('UNKNOWN_ERROR', result.detail || 'Login failed. Please try again.');
+                    }
                 }
             } catch (error) {
                 console.error('[LOGIN] Error:', error);
-                alert('Error connecting to server. Please try again.');
+                
+                if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+                    showError('SERVER_NOT_CONNECTED', 'Cannot reach the server. Please ensure the backend is running on port 8000.');
+                } else if (error instanceof SyntaxError) {
+                    showError('UNKNOWN_ERROR', 'Invalid response from server');
+                } else {
+                    showError('UNKNOWN_ERROR', error.message || 'An unexpected error occurred during login');
+                }
             }
         }
     </script>

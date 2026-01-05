@@ -6,53 +6,16 @@
     <title>Government Disbursement Portal</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="index.css">
+    <link rel="stylesheet" href="error-handler.css">
 </head>
 <body>
 
+<div id="header-container"></div>
+
 <div class="container">
-    <aside class="sidebar">
-        <div class="brand">
-            <div class="logo-placeholder">
-                <i class="fa-solid fa-fire"></i> <span style="font-weight:bold;">নগদ</span>
-            </div>
-        </div>
-        
-        <div class="sidebar-menu">
-            <h3>Government Disbursement</h3>
-            <ul>
-                <li class="active"><i class="fa-solid fa-file-upload"></i> Upload History</li>
-                <li><i class="fa-solid fa-list"></i> Transaction History</li>
-                <li><i class="fa-solid fa-shield-halved"></i> Audit History</li>
-            </ul>
-        </div>
-        
-        <div class="sidebar-footer">
-            <i class="fa-solid fa-angles-right"></i>
-        </div>
-    </aside>
-
+    <div id="sidebar-container"></div>
+    
     <main class="main-content">
-        <header>
-            <div class="header-left">
-                <h1>Government Disbursement</h1>
-                <!-- <p>Sonali Bank PLC portal for government disbursement file upload</p> -->
-            </div>
-            <div class="header-right">
-                <!-- <i class="fa-solid fa-magnifying-glass search-icon"></i>
-                <i class="fa-solid fa-grip"></i> -->
-                <div class="notification">
-                    <!-- <i class="fa-solid fa-bell"></i> -->
-                    <!-- <span class="badge">15</span> -->
-                </div>
-                <div class="user-profile">
-                    <span id="username-display" style="margin-right: 15px;"></span>
-                    <button id="logout-btn" class="logout-btn" onclick="handleLogout()">
-                        <i class="fa-solid fa-sign-out-alt"></i> Logout
-                    </button>
-                </div>
-            </div>
-        </header>
-
         <section class="filters">
             <div class="date-group">
                 <label>START DATE</label>
@@ -90,11 +53,13 @@
             <table>
                 <thead>
                     <tr>
-                        <th>ID <i class="fa-solid fa-sort"></i></th>
-                        <th>Product Name</th>
-                        <th>Description</th>
-                        <th>Price</th>
-                        <th>Upload Date</th>
+                        <th>EFT Ref <i class="fa-solid fa-sort"></i></th>
+                        <th>Account Title</th>
+                        <th>Account Type</th>
+                        <th>Account No</th>
+                        <th>Amount</th>
+                        <th>Beneficiary ID</th>
+                        <th>Mobile</th>
                         <th>Status <i class="fa-solid fa-sort"></i></th>
                         <th>Action</th>
                     </tr>
@@ -118,25 +83,61 @@
 <div id="edit-modal" class="modal" style="display:none;">
     <div class="modal-content">
         <div class="modal-header">
-            <h2>Edit Product</h2>
+            <h2>Edit Transaction</h2>
             <span class="close-modal" onclick="closeEditModal()">&times;</span>
         </div>
         <div class="modal-body">
-            <div class="form-group">
-                <label>Product ID</label>
-                <input type="text" id="edit-id" readonly>
+            <div class="form-group" style="grid-column: 1 / -1;">
+                <label>EFT Reference Number</label>
+                <input type="text" id="edit-EFTREFNUMBER" readonly>
             </div>
             <div class="form-group">
-                <label>Product Name</label>
-                <input type="text" id="edit-name" placeholder="Enter product name">
+                <label>Account Title</label>
+                <input type="text" id="edit-CRACCOUNTTITLE" placeholder="Enter account title">
             </div>
             <div class="form-group">
-                <label>Description</label>
-                <textarea id="edit-description" placeholder="Enter description" rows="3"></textarea>
+                <label>Account Type</label>
+                <input type="text" id="edit-CRACCOUNTTYPE" placeholder="Enter account type">
             </div>
             <div class="form-group">
-                <label>Price (BDT)</label>
-                <input type="number" id="edit-price" placeholder="Enter price" step="0.01">
+                <label>Account Number</label>
+                <input type="text" id="edit-CRACCOUNTNO" placeholder="Enter account number">
+            </div>
+            <div class="form-group">
+                <label>Routing Number</label>
+                <input type="text" id="edit-CRROUTINGNO" placeholder="Enter routing number">
+            </div>
+            <div class="form-group">
+                <label>Amount (BDT)</label>
+                <input type="number" id="edit-CRAMOUNT" placeholder="Enter amount" step="0.01">
+            </div>
+            <div class="form-group">
+                <label>Beneficiary ID</label>
+                <input type="text" id="edit-BENEFICIARY_ID" placeholder="Enter beneficiary ID">
+            </div>
+            <div class="form-group">
+                <label>Mobile</label>
+                <input type="text" id="edit-MOBILE" placeholder="Enter mobile number">
+            </div>
+            <div class="form-group">
+                <label>NID Number</label>
+                <input type="text" id="edit-NID_NO" placeholder="Enter NID number">
+            </div>
+            <div class="form-group">
+                <label>Ministry Code</label>
+                <input type="text" id="edit-MIN_CODE" placeholder="Enter ministry code">
+            </div>
+            <div class="form-group">
+                <label>Department Code</label>
+                <input type="text" id="edit-DEPT_CODE" placeholder="Enter department code">
+            </div>
+            <div class="form-group">
+                <label>Payment Cycle</label>
+                <input type="text" id="edit-PAYMENT_CYCLE_NAME_EN" placeholder="Enter payment cycle">
+            </div>
+            <div class="form-group">
+                <label>Scheme Code</label>
+                <input type="text" id="edit-SCHEME_CODE" placeholder="Enter scheme code">
             </div>
         </div>
         <div class="modal-footer">
@@ -147,6 +148,10 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.min.js"></script>
+<script src="layout-wrapper.js"></script>
+<script src="error-handler.js"></script>
+<script src="header.js"></script>
+<script src="sidebar.js"></script>
 <script src="index.js"></script>
 </body>
 </html>

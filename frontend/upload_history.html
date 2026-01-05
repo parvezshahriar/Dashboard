@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload History - Government Disbursement Portal</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="index.css">
+    <link rel="stylesheet" href="error-handler.css">
+</head>
+<body>
+
+<div id="header-container"></div>
+
+<div class="container">
+    <div id="sidebar-container"></div>
+    
+    <main class="main-content">
+        <h2 style="margin-bottom: 20px; color: #333;">Upload History</h2>
+        
+        <section class="filters">
+            <div class="date-group">
+                <label>START DATE</label>
+                <input id="start-date" type="date">
+            </div>
+            <div class="date-group">
+                <label>END DATE</label>
+                <input id="end-date" type="date">
+            </div>
+            <div class="date-group">
+                <button onclick="resetUploadDateFilter()" class="reset-date-btn">Reset Date</button>
+            </div>
+        </section>
+
+        <section class="table-controls">
+            <div class="left-controls">
+                <span>Show 
+                    <select id="items-per-page">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select> 
+                entries</span>
+                <div class="search-box">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input id="search-input" type="text" placeholder="Search batch name...">
+                </div>
+            </div>
+        </section>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Serial No</th>
+                        <th>Upload Date</th>
+                        <th>Batch Name</th>
+                        <th>Batch Row Count</th>
+                        <th>Total Amount</th>
+                        <th>Disbursed Amount</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body">
+                    </tbody>
+            </table>
+        </div>
+
+        <div class="pagination">
+            <span>Previous</span>
+            <span class="page-num active">1</span>
+            <span class="page-num">2</span>
+            <span class="page-num">3</span>
+            <span>Next</span>
+        </div>
+    </main>
+</div>
+
+<!-- View Details Modal -->
+<div id="details-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Batch Upload Details</h2>
+            <span class="close-modal" onclick="closeDetailsModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div class="form-group" style="grid-column: 1 / -1;">
+                <label>Batch Name</label>
+                <input type="text" id="details-batch-name" readonly>
+            </div>
+            <div class="form-group">
+                <label>Upload Date</label>
+                <input type="text" id="details-upload-date" readonly>
+            </div>
+            <div class="form-group">
+                <label>Total Rows</label>
+                <input type="text" id="details-total-rows" readonly>
+            </div>
+            <div class="form-group">
+                <label>Total Amount</label>
+                <input type="text" id="details-total-amount" readonly>
+            </div>
+            <div class="form-group">
+                <label>Disbursed Amount</label>
+                <input type="text" id="details-disbursed-amount" readonly>
+            </div>
+            <div class="form-group">
+                <label>Status</label>
+                <input type="text" id="details-status" readonly>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-cancel" onclick="closeDetailsModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.min.js"></script>
+<script src="layout-wrapper.js"></script>
+<script src="error-handler.js"></script>
+<script src="header.js"></script>
+<script src="sidebar.js"></script>
+<script src="upload_history.js"></script>
+</body>
+</html>

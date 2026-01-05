@@ -1,0 +1,120 @@
+/* Sidebar */
+.sidebar {
+    width: 260px;
+    height: 100%;
+    box-sizing: border-box;
+    flex-shrink: 0;
+    background: linear-gradient(180deg, #ff8c61 0%, #ff6f3c 100%);
+    color: white;
+    display: flex;
+    flex-direction: column;
+    padding: 70px 20px 20px 0px;
+    margin: 0;
+    align-items: center;
+}
+
+.logo-placeholder {
+    font-size: 24px;
+    margin-bottom: 40px;
+    text-align: center;
+}
+
+.sidebar-menu h3 {
+    font-size: 14px;
+    opacity: 0.9;
+    margin-bottom: 15px;
+    font-weight: 500;
+    text-align: center;
+    width: 100%;
+}
+
+.sidebar-menu ul {
+    list-style: none;
+    width: 100%;
+}
+
+.sidebar-item {
+    padding: 12px 15px;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    opacity: 0.8;
+    transition: all 0.3s ease;
+    border-radius: 8px;
+    margin: 5px auto;
+    position: relative;
+    overflow: hidden;
+    width: 90%;
+}
+
+.sidebar-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.2);
+    transition: left 0.3s ease;
+    z-index: -1;
+}
+
+.sidebar-item:hover::before {
+    left: 0;
+}
+
+.sidebar-item.active {
+    opacity: 1;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    transform: translateX(5px);
+}
+
+.sidebar-item:hover {
+    opacity: 1;
+    transform: translateX(5px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.sidebar-item i {
+    transition: transform 0.3s ease;
+}
+
+.sidebar-item:hover i {
+    transform: scale(1.15);
+}
+
+.sidebar-item.active i {
+    animation: bounce 0.6s ease;
+}
+
+.sidebar-footer {
+    margin-top: auto;
+    text-align: center;
+    opacity: 0.7;
+    cursor: pointer;
+}
+
+.sidebar-footer:hover {
+    opacity: 1;
+}
+
+/* Hide dashboard button for non-admin users via data attribute */
+.sidebar-item[data-page="dashboard"]:not([data-admin="true"]) {
+    display: none !important;
+}
+
+/* Bounce Animation */
+@keyframes bounce {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.2);
+    }
+}
+

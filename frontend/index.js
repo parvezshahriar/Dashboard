@@ -1,20 +1,9 @@
 // 1. Fetch Data Source from API
 let tableData = [];
 let currentPage = 1;
-let itemsPerPage = 10;
+let itemsPerPage = 10; // Show 10 records per page
 
-// Logout function
-function handleLogout() {
-    // Clear localStorage
-    localStorage.removeItem('userId');
-    localStorage.removeItem('username');
-    localStorage.removeItem('userRole');
-    
-    console.log('[LOGOUT] User logged out');
-    
-    // Redirect to login page
-    window.location.href = 'login.html';
-}
+// Table and data management functions below
 
 // RBAC Helper - Check user role
 function getUserRole() {
@@ -104,7 +93,7 @@ async function fetchProductsFromDatabase() {
         return tableData;
     } catch (error) {
         console.error('[FETCH] Error fetching products:', error);
-        alert('Failed to load products from database. Check browser console.');
+        showError('SERVER_NOT_CONNECTED', 'Failed to load products from database. Please check if the server is running.');
         // Fallback to empty array if API fails
         return [];
     }
@@ -160,25 +149,27 @@ function renderTable(data) {
             deleteDisplay = 'none';
             downloadDisplay = 'none';
         } else if (userRole === 'user') {
-            editDisplay = 'none';
+            editDisplay = 'none'; // User role cannot edit
             deleteDisplay = 'none';
             downloadDisplay = 'none';
         }
         
         tr.innerHTML = `
-            <td>${row.id}</td>
-            <td>${row.name}</td>
-            <td>${row.description}</td>
-            <td style="font-weight:bold;">${formatMoney(row.price)}</td>
-            <td>${formatDate(row.created_at)}</td>
+            <td>${row.EFTREFNUMBER}</td>
+            <td>${row.CRACCOUNTTITLE}</td>
+            <td>${row.CRACCOUNTTYPE}</td>
+            <td>${row.CRACCOUNTNO}</td>
+            <td style="font-weight:bold;">${formatMoney(row.CRAMOUNT)}</td>
+            <td>${row.BENEFICIARY_ID}</td>
+            <td>${row.MOBILE}</td>
             <td>
                 <span class="status ${getStatusClass(row.status)}">
                     ${row.status}
                 </span>
             </td>
             <td class="actions">
-                <i class="fa-regular fa-pen-to-square action-edit" title="Edit" onclick="openEditModal(${row.id}, '${row.name.replace(/'/g, "\\'")}', '${(row.description || '').replace(/'/g, "\\'")}', ${row.price})" style="cursor:pointer; display:${editDisplay};"></i>
-                <i class="fa-regular fa-trash-can action-delete" title="Delete" onclick="deleteProduct(${row.id})" style="cursor:pointer; display:${deleteDisplay};"></i>
+                <i class="fa-regular fa-pen-to-square action-edit" title="Edit" onclick="openEditModal(${JSON.stringify(row).replace(/"/g, '&quot;')})" style="cursor:pointer; display:${editDisplay};"></i>
+                <i class="fa-regular fa-trash-can action-delete" title="Delete" onclick="deleteProduct('${row.EFTREFNUMBER}')" style="cursor:pointer; display:${deleteDisplay};"></i>
                 <i class="fa-solid fa-download action-download" title="Download" style="display:${downloadDisplay};"></i>
             </td>
         `;
@@ -198,6 +189,12 @@ function updatePaginationControls(totalPages) {
     // Clear existing pagination
     paginationContainer.innerHTML = '';
 
+    // Handle case with no pages or no data
+    if (totalPages === 0) {
+        paginationContainer.innerHTML = '<span style="color: #999;">No data to paginate</span>';
+        return;
+    }
+
     // Previous button
     const prevBtn = document.createElement('span');
     prevBtn.textContent = 'Previous';
@@ -211,8 +208,11 @@ function updatePaginationControls(totalPages) {
     };
     paginationContainer.appendChild(prevBtn);
 
-    // Page numbers
-    for (let i = 1; i <= totalPages; i++) {
+    // Page numbers - show max 5 pages or all if less than 5
+    const startPage = Math.max(1, currentPage - 2);
+    const endPage = Math.min(totalPages, currentPage + 2);
+
+    for (let i = startPage; i <= endPage; i++) {
         const pageNum = document.createElement('span');
         pageNum.className = 'page-num' + (i === currentPage ? ' active' : '');
         pageNum.textContent = i;
@@ -243,6 +243,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Check if user is logged in
     const userId = getUserId();
     const username = localStorage.getItem('username');
+    const userRole = localStorage.getItem('userRole');
     
     if (!userId || !username) {
         // Redirect to login if not logged in
@@ -250,11 +251,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
     
-    // Display username in header
-    const usernameDisplay = document.getElementById('username-display');
-    if (usernameDisplay) {
-        usernameDisplay.textContent = `Welcome, ${username}`;
-    }
+    // Setup profile display
+    setupProfileDisplay(username, userRole);
     
     // Update UI based on user role first
     updateUIBasedOnRole();
@@ -312,9 +310,40 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
     }
+    
+    // CSV Drag and Drop functionality
+    const uploadBox = document.getElementById('upload-box');
+    if (uploadBox) {
+        uploadBox.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadBox.style.background = '#e8f0ff';
+            uploadBox.style.borderColor = '#667eea';
+        });
+        
+        uploadBox.addEventListener('dragleave', () => {
+            uploadBox.style.background = '#f9f9f9';
+            uploadBox.style.borderColor = '#667eea';
+        });
+        
+        uploadBox.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadBox.style.background = '#f9f9f9';
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0];
+                if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
+                    uploadCSVFile(file);
+                } else {
+                    alert('⚠️ Please drop a CSV file');
+                }
+            }
+        });
+    }
 });
 
-// 5. Upload CSV File to Database
+// Need debugger
+
+// 5. Upload CSV File - Client-side validation only
 async function uploadCSVFile(file) {
     try {
         // Check permission
@@ -336,109 +365,74 @@ async function uploadCSVFile(file) {
         reader.onload = (e) => {
             try {
                 const csv = e.target.result;
-                const lines = csv.trim().split('\n');
+                const { headers, rows } = parseCSVContent(csv);
                 
-                if (lines.length < 1) {
-                    alert('✗ CSV file is empty');
+                // Validate headers
+                const requiredCols = getRequiredCSVColumns();
+                const validation = validateCSVHeaders(headers, requiredCols);
+                
+                if (!validation.isValid) {
+                    alert(`✗ Missing required columns: ${validation.missingColumns.join(', ')}`);
                     return;
                 }
-                
-                // Parse CSV
-                const headers = lines[0].split(',').map(h => h.trim());
-                const requiredColumns = ['name', 'description', 'price'];
-                
-                console.log('[UPLOAD] Headers found:', headers);
-                console.log('[UPLOAD] Required columns:', requiredColumns);
-                
-                // Check if required columns exist (case-insensitive)
-                const headersLower = headers.map(h => h.toLowerCase());
-                const missingColumns = requiredColumns.filter(col => !headersLower.includes(col));
-                
-                if (missingColumns.length > 0) {
-                    alert(`✗ Missing required columns: ${missingColumns.join(', ')}\n\nRequired columns: ${requiredColumns.join(', ')}`);
-                    return;
-                }
-                
-                // Get column indices
-                const nameIdx = headersLower.indexOf('name');
-                const descIdx = headersLower.indexOf('description');
-                const priceIdx = headersLower.indexOf('price');
                 
                 // Validate rows
-                let totalRows = 0;
                 let validRows = [];
                 let invalidRows = [];
-                let allRowsWithValidation = []; // Track all rows with validation status
+                let allRowsWithValidation = [];
+                const headersLower = headers.map(h => h.toLowerCase());
                 
-                for (let i = 1; i < lines.length; i++) {
-                    const line = lines[i].trim();
-                    if (!line) continue; // Skip empty lines
+                // Track unique fields for duplicate detection
+                const uniqueFieldTracker = {
+                    EFTREFNUMBER: new Set(),
+                    CRACCOUNTNO: new Set(),
+                    BENEFICIARY_ID: new Set(),
+                    NID_NO: new Set()
+                };
+                
+                rows.forEach((row, index) => {
+                    const rowNumber = index + 2; // +2 because index 0 is header, +1 for 1-based
                     
-                    totalRows++;
-                    const cols = line.split(',').map(c => c.trim());
+                    // Build row data object
+                    const rowData = {};
+                    const requiredCols = getRequiredCSVColumns();
+                    requiredCols.forEach(col => {
+                        const colIndex = getColumnIndex(headersLower, col);
+                        rowData[col] = colIndex >= 0 ? row[colIndex] : '';
+                    });
                     
-                    // Check if row has enough columns
-                    if (cols.length < Math.max(nameIdx, descIdx, priceIdx) + 1) {
-                        invalidRows.push({
-                            row: i + 1,
-                            reason: 'Not enough columns'
-                        });
+                    // Also get optional columns for duplication check
+                    const optionalCols = getOptionalCSVColumns();
+                    optionalCols.forEach(col => {
+                        const colIndex = getColumnIndex(headersLower, col);
+                        rowData[col] = colIndex >= 0 ? row[colIndex] : '';
+                    });
+                    
+                    // Validate
+                    const validation = validateRowData(rowData, uniqueFieldTracker);
+                    
+                    if (validation.isValid) {
+                        validRows.push(rowData);
                         allRowsWithValidation.push({
-                            rowNumber: i + 1,
-                            data: cols,
-                            error: 'Not enough columns'
-                        });
-                        continue;
-                    }
-                    
-                    const name = cols[nameIdx];
-                    const description = cols[descIdx];
-                    const price = cols[priceIdx];
-                    
-                    // Validate data
-                    let isValid = true;
-                    let error = '';
-                    
-                    if (!name || name === '') {
-                        isValid = false;
-                        error = 'Missing product name';
-                    } else if (!price || price === '') {
-                        isValid = false;
-                        error = 'Missing price';
-                    } else if (isNaN(parseFloat(price))) {
-                        isValid = false;
-                        error = 'Invalid price (must be numeric)';
-                    } else if (parseFloat(price) <= 0) {
-                        isValid = false;
-                        error = 'Price must be greater than 0';
-                    }
-                    
-                    if (isValid) {
-                        validRows.push({
-                            name: name,
-                            description: description || '',
-                            price: parseFloat(price)
-                        });
-                        allRowsWithValidation.push({
-                            rowNumber: i + 1,
-                            data: cols,
+                            rowNumber: rowNumber,
+                            data: row,
                             error: 'Valid'
                         });
                     } else {
                         invalidRows.push({
-                            row: i + 1,
-                            reason: error
+                            row: rowNumber,
+                            reason: validation.error
                         });
                         allRowsWithValidation.push({
-                            rowNumber: i + 1,
-                            data: cols,
-                            error: error
+                            rowNumber: rowNumber,
+                            data: row,
+                            error: validation.error
                         });
                     }
-                }
+                });
                 
-                // Show validation report modal
-                showValidationReport(file.name, totalRows, validRows, invalidRows, allRowsWithValidation, headers);
+                // Show validation report
+                showValidationReport(file.name, rows.length, validRows, invalidRows, allRowsWithValidation, headers);
                 
             } catch (error) {
                 console.error('[UPLOAD] Validation error:', error);
@@ -454,7 +448,7 @@ async function uploadCSVFile(file) {
     }
 }
 
-// Show validation report modal
+// Show validation report modal - Client-side only
 function showValidationReport(fileName, totalRows, validRows, invalidRows, allRowsWithValidation, headers) {
     const validCount = validRows.length;
     const invalidCount = invalidRows.length;
@@ -470,7 +464,8 @@ function showValidationReport(fileName, totalRows, validRows, invalidRows, allRo
     window.reportData = {
         fileName: fileName,
         allRowsWithValidation: allRowsWithValidation,
-        headers: headers
+        headers: headers,
+        validRows: validRows
     };
     
     // Create modal
@@ -495,7 +490,7 @@ function showValidationReport(fileName, totalRows, validRows, invalidRows, allRo
     modal.innerHTML = `
         <div style="background: white; border-radius: 8px; padding: 30px; width: 500px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h2 style="margin: 0; font-size: 18px; color: #333;">CSV Upload Report</h2>
+                <h2 style="margin: 0; font-size: 18px; color: #333;">CSV Validation Report</h2>
                 <button onclick="document.getElementById('validation-modal').remove()" style="font-size: 24px; color: #999; cursor: pointer; border: none; background: none;">&times;</button>
             </div>
             
@@ -513,20 +508,17 @@ function showValidationReport(fileName, totalRows, validRows, invalidRows, allRo
                     <strong>Total Rows:</strong> ${totalRows}
                 </div>
                 <div style="font-size: 14px; color: #27ae60; margin-bottom: 8px;">
-                    <strong>✓ Successfully Processed:</strong> ${validCount}
+                    <strong>✓ Valid Rows:</strong> ${validCount}
                 </div>
                 <div style="font-size: 14px; color: #e74c3c; margin-bottom: 8px;">
-                    <strong>✗ Failed To Process:</strong> ${invalidCount}
+                    <strong>✗ Invalid Rows:</strong> ${invalidCount}
                 </div>
             </div>
             
             <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                <button onclick="downloadErrorReport()" style="padding: 10px 20px; background: #1a1a1a; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">Download Report</button>
-                <button 
-                    onclick="processValidRows(${JSON.stringify(validRows).replace(/"/g, '&quot;')})" 
-                    style="padding: 10px 20px; background: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
-                    Process ${validCount} Valid Rows
-                </button>
+                <button onclick="downloadValidationReport()" style="padding: 10px 20px; background: #1a1a1a; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">Download Report</button>
+                <button onclick="uploadValidRowsToDatabase()" style="padding: 10px 20px; background: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">Upload Valid Rows</button>
+                <button onclick="document.getElementById('validation-modal').remove()" style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">Close</button>
             </div>
         </div>
     `;
@@ -534,8 +526,8 @@ function showValidationReport(fileName, totalRows, validRows, invalidRows, allRo
     document.body.appendChild(modal);
 }
 
-// Download Error Report as CSV
-function downloadErrorReport() {
+// Download validation report as CSV
+function downloadValidationReport() {
     if (!window.reportData) {
         alert('Error: Report data not found. Please try uploading again.');
         return;
@@ -543,13 +535,12 @@ function downloadErrorReport() {
     
     const { fileName, allRowsWithValidation, headers } = window.reportData;
     
-    console.log('[DOWNLOAD] Creating error report CSV');
+    console.log('[DOWNLOAD] Creating validation report CSV');
     
-    // Create CSV content with ID + original headers + two validation columns
+    // Create CSV content
     const csvHeaders = ['ID', ...headers, 'Validation Status', 'Reason'];
     const csvRows = [csvHeaders.join(',')];
     
-    // Add data rows with row number as ID + validation status and reason
     allRowsWithValidation.forEach(row => {
         const isValid = row.error === 'Valid';
         const status = isValid ? 'Valid' : 'Invalid';
@@ -568,7 +559,7 @@ function downloadErrorReport() {
     // Generate filename with timestamp
     const timestamp = new Date().toISOString().split('T')[0];
     const baseFileName = fileName.replace('.csv', '');
-    const downloadFileName = `${baseFileName}_error_report_${timestamp}.csv`;
+    const downloadFileName = `${baseFileName}_validation_report_${timestamp}.csv`;
     
     link.setAttribute('href', url);
     link.setAttribute('download', downloadFileName);
@@ -578,19 +569,33 @@ function downloadErrorReport() {
     link.click();
     document.body.removeChild(link);
     
-    console.log('[DOWNLOAD] Error report downloaded:', downloadFileName);
+    console.log('[DOWNLOAD] Report downloaded:', downloadFileName);
 }
-async function processValidRows(validRows) {
+
+// Upload valid rows to database
+async function uploadValidRowsToDatabase() {
+    if (!window.reportData || !window.reportData.validRows || window.reportData.validRows.length === 0) {
+        alert('❌ No valid rows to upload');
+        return;
+    }
+
+    const userId = getUserId();
+    const validRows = window.reportData.validRows;
+    
+    // Show confirmation
+    if (!confirm(`Are you sure you want to upload ${validRows.length} valid row(s) to the database?`)) {
+        return;
+    }
+
     try {
-        // Check permission
-        if (!hasPermission('csv')) {
-            alert('❌ You do not have permission to process CSV data');
-            return;
+        console.log('[UPLOAD] Sending valid rows to backend:', validRows);
+        
+        // Show loading state
+        const modal = document.getElementById('validation-modal');
+        if (modal) {
+            modal.style.opacity = '0.5';
         }
-        
-        console.log('[PROCESS] Processing', validRows.length, 'valid rows');
-        
-        const userId = getUserId();
+
         const response = await fetch(`http://127.0.0.1:8000/upload-batch?user_id=${userId}`, {
             method: 'POST',
             headers: {
@@ -603,34 +608,56 @@ async function processValidRows(validRows) {
                 timestamp: new Date().toISOString()
             })
         });
-        
+
         const result = await response.json();
-        console.log('[PROCESS] Result:', result);
-        
-        // Remove modal
-        const modal = document.getElementById('validation-modal');
-        if (modal) modal.remove();
-        
+        console.log('[UPLOAD] Backend response:', result);
+
+        // Hide modal and show result
+        if (modal) {
+            modal.remove();
+        }
+
         if (response.ok) {
-            alert(`Successfully processed:\n${result.success_count} products imported`);
-            // Clear file input
-            const fileInput = document.getElementById('csv-file-input');
-            if (fileInput) fileInput.value = '';
-            // Refresh the table data
-            await fetchProductsFromDatabase();
-            applyFilters();
+            // Only show error details if there are errors
+            if (result.error_count > 0) {
+                let errorMsg = `✅ Uploaded ${result.success_count} row(s) successfully!\n\n⚠️  ${result.error_count} error(s) encountered:\n`;
+                if (result.error_details && result.error_details.length > 0) {
+                    errorMsg += result.error_details.slice(0, 5).join('\n');
+                    if (result.error_details.length > 5) {
+                        errorMsg += `\n... and ${result.error_details.length - 5} more errors`;
+                    }
+                }
+                alert(errorMsg);
+            } else {
+                // No errors - clean success message
+                alert(`✅ Successfully uploaded ${result.success_count} row(s) to the database!`);
+            }
+            
+            // Refresh the entire page after successful upload
+            setTimeout(() => {
+                location.reload();
+            }, 1000);
         } else {
-            alert(`Failed to process:\n${result.message || 'Unknown error'}`);
+            let errorMsg = result.message || 'Unknown error';
+            if (result.error_details && result.error_details.length > 0) {
+                errorMsg += '\n\n' + result.error_details.slice(0, 3).join('\n');
+                if (result.error_details.length > 3) {
+                    errorMsg += `\n... and ${result.error_details.length - 3} more errors`;
+                }
+            }
+            alert(`❌ Upload failed:\n${errorMsg}`);
         }
     } catch (error) {
-        console.error('[PROCESS] Error:', error);
-        alert('Error processing rows. Please check the console.');
+        console.error('[UPLOAD] Error uploading rows:', error);
+        const modal = document.getElementById('validation-modal');
+        if (modal) {
+            modal.remove();
+        }
+        alert('❌ Error uploading rows. Please check the console for details.\n\n' + error.message);
     }
 }
 
-// 6. Validate CSV Structure
-
-// 5. Apply all filters together
+// 6. Apply all filters together
 function applyFilters() {
     let filteredData = [...tableData];
     
@@ -724,115 +751,128 @@ function resetDateFilter() {
 }
 
 // 7. Edit Modal Functions
-function openEditModal(id, name, description, price) {
-    console.log('Opening edit modal for product:', id);
-    document.getElementById('edit-id').value = id;
-    document.getElementById('edit-name').value = name;
-    document.getElementById('edit-description').value = description;
-    document.getElementById('edit-price').value = price;
+function openEditModal(rowData) {
+    console.log('Opening edit modal for transaction:', rowData.EFTREFNUMBER);
+    document.getElementById('edit-EFTREFNUMBER').value = rowData.EFTREFNUMBER;
+    document.getElementById('edit-CRACCOUNTTITLE').value = rowData.CRACCOUNTTITLE;
+    document.getElementById('edit-CRACCOUNTTYPE').value = rowData.CRACCOUNTTYPE;
+    document.getElementById('edit-CRACCOUNTNO').value = rowData.CRACCOUNTNO;
+    document.getElementById('edit-CRROUTINGNO').value = rowData.CRROUTINGNO;
+    document.getElementById('edit-CRAMOUNT').value = rowData.CRAMOUNT;
+    document.getElementById('edit-BENEFICIARY_ID').value = rowData.BENEFICIARY_ID;
+    document.getElementById('edit-MOBILE').value = rowData.MOBILE;
+    document.getElementById('edit-NID_NO').value = rowData.NID_NO;
+    document.getElementById('edit-MIN_CODE').value = rowData.MIN_CODE;
+    document.getElementById('edit-DEPT_CODE').value = rowData.DEPT_CODE;
+    document.getElementById('edit-PAYMENT_CYCLE_NAME_EN').value = rowData.PAYMENT_CYCLE_NAME_EN;
+    document.getElementById('edit-SCHEME_CODE').value = rowData.SCHEME_CODE;
     document.getElementById('edit-modal').style.display = 'flex';
 }
 
 function closeEditModal() {
     document.getElementById('edit-modal').style.display = 'none';
-    // Clear fields
-    document.getElementById('edit-id').value = '';
-    document.getElementById('edit-name').value = '';
-    document.getElementById('edit-description').value = '';
-    document.getElementById('edit-price').value = '';
+    // Clear all fields
+    document.getElementById('edit-EFTREFNUMBER').value = '';
+    document.getElementById('edit-CRACCOUNTTITLE').value = '';
+    document.getElementById('edit-CRACCOUNTTYPE').value = '';
+    document.getElementById('edit-CRACCOUNTNO').value = '';
+    document.getElementById('edit-CRROUTINGNO').value = '';
+    document.getElementById('edit-CRAMOUNT').value = '';
+    document.getElementById('edit-BENEFICIARY_ID').value = '';
+    document.getElementById('edit-MOBILE').value = '';
+    document.getElementById('edit-NID_NO').value = '';
+    document.getElementById('edit-MIN_CODE').value = '';
+    document.getElementById('edit-DEPT_CODE').value = '';
+    document.getElementById('edit-PAYMENT_CYCLE_NAME_EN').value = '';
+    document.getElementById('edit-SCHEME_CODE').value = '';
 }
 
 // 8. Save Product Changes
 async function saveProductChanges() {
-    const id = document.getElementById('edit-id').value;
-    const name = document.getElementById('edit-name').value;
-    const description = document.getElementById('edit-description').value;
-    const price = document.getElementById('edit-price').value;
+    const id = document.getElementById('edit-EFTREFNUMBER').value;
     
-    // Validate fields
-    if (!name || !price) {
-        alert('Please fill in all required fields (Name and Price)');
+    // Get all field values
+    const updateData = {
+        EFTREFNUMBER: id,
+        CRACCOUNTTITLE: document.getElementById('edit-CRACCOUNTTITLE').value,
+        CRACCOUNTTYPE: document.getElementById('edit-CRACCOUNTTYPE').value,
+        CRACCOUNTNO: document.getElementById('edit-CRACCOUNTNO').value,
+        CRROUTINGNO: document.getElementById('edit-CRROUTINGNO').value,
+        CRAMOUNT: parseFloat(document.getElementById('edit-CRAMOUNT').value),
+        BENEFICIARY_ID: document.getElementById('edit-BENEFICIARY_ID').value,
+        MOBILE: document.getElementById('edit-MOBILE').value,
+        NID_NO: document.getElementById('edit-NID_NO').value,
+        MIN_CODE: document.getElementById('edit-MIN_CODE').value,
+        DEPT_CODE: document.getElementById('edit-DEPT_CODE').value,
+        PAYMENT_CYCLE_NAME_EN: document.getElementById('edit-PAYMENT_CYCLE_NAME_EN').value,
+        SCHEME_CODE: document.getElementById('edit-SCHEME_CODE').value
+    };
+    
+    // Validate required fields
+    if (!updateData.CRACCOUNTTITLE || !updateData.CRACCOUNTNO || !updateData.CRAMOUNT) {
+        alert('Please fill in all required fields');
         return;
     }
     
-    if (isNaN(parseFloat(price)) || parseFloat(price) < 0) {
-        alert('Invalid price value');
+    if (isNaN(updateData.CRAMOUNT) || updateData.CRAMOUNT < 0) {
+        alert('Invalid amount value');
         return;
     }
     
     // Check permission
     if (!hasPermission('edit')) {
-        alert('❌ You do not have permission to edit products');
+        alert('❌ You do not have permission to edit transactions');
         return;
     }
     
     try {
         const userId = getUserId();
-        console.log('Saving product:', { id, name, description, price });
+        console.log('Saving transaction with all fields:', updateData);
         
         const response = await fetch(`http://127.0.0.1:8000/product/${id}?user_id=${userId}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                id: parseInt(id),
-                name: name,
-                description: description,
-                price: parseFloat(price)
-            })
+            body: JSON.stringify(updateData)
         });
         
         const result = await response.json();
         console.log('Update response:', result);
         
         if (response.ok) {
-            alert(`Product updated successfully!`);
+            alert(`Transaction updated successfully!`);
             closeEditModal();
             
-            // Update the product in tableData in-place using map()
-            // This preserves the product's position without reordering
-            tableData = tableData.map(product => 
-                product.id === parseInt(id) 
-                    ? { 
-                        ...product, 
-                        name: name,
-                        description: description,
-                        price: parseFloat(price),
-                        created_at: product.created_at // Keep original timestamp
-                      }
-                    : product
-            );
-            
-            console.log('Updated tableData:', tableData);
-            
-            // Refresh the current view without resetting page
-            refreshTableKeepPage();
+            // Refresh the entire page after successful update
+            setTimeout(() => {
+                location.reload();
+            }, 500);
         } else {
             alert(`Update failed:\n${result.detail || 'Unknown error'}`);
         }
     } catch (error) {
-        console.error('Error updating product:', error);
-        alert('Error updating product. Please check the console for details.');
+        console.error('Error updating transaction:', error);
+        alert('Error updating transaction. Please check the console for details.');
     }
 }
 
 // 9. Delete Product
 async function deleteProduct(id) {
     // Confirm deletion
-    if (!confirm(`⚠️ Are you sure you want to delete product #${id}? This action cannot be undone.`)) {
+    if (!confirm(`⚠️ Are you sure you want to delete transaction ${id}? This action cannot be undone.`)) {
         return;
     }
     
     // Check permission
     if (!hasPermission('delete')) {
-        alert('❌ You do not have permission to delete products');
+        alert('❌ You do not have permission to delete transactions');
         return;
     }
     
     try {
         const userId = getUserId();
-        console.log('Deleting product:', id);
+        console.log('Deleting transaction:', id);
         
         const response = await fetch(`http://127.0.0.1:8000/product/${id}?user_id=${userId}`, {
             method: 'DELETE'
@@ -842,20 +882,160 @@ async function deleteProduct(id) {
         console.log('Delete response:', result);
         
         if (response.ok) {
-            alert(`Product deleted successfully!`);
-            // Refresh table and maintain filters
-            await fetchProductsFromDatabase();
-            applyFilters();
+            alert(`Transaction deleted successfully!`);
+            // Refresh the entire page after successful delete
+            setTimeout(() => {
+                location.reload();
+            }, 500);
         } else {
             alert(`Delete failed:\n${result.detail || 'Unknown error'}`);
         }
     } catch (error) {
-        console.error('Error deleting product:', error);
-        alert('Error deleting product. Please check the console for details.');
+        console.error('Error deleting transaction:', error);
+        alert('Error deleting transaction. Please check the console for details.');
     }
 }
 
 // 10. Store current page before refreshing
 function refreshTableKeepPage() {
     applyFilters();
+}
+
+// CSV UTILITY HELPER FUNCTIONS
+
+// Parse CSV content and extract headers and rows
+function parseCSVContent(csv) {
+    const lines = csv.trim().split('\n').filter(line => line.trim());
+    if (lines.length < 1) {
+        throw new Error('CSV file is empty');
+    }
+    
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const rows = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim());
+        rows.push(values);
+    }
+    
+    return { headers, rows };
+}
+
+// Validate CSV headers against required columns
+function validateCSVHeaders(headers, requiredColumns) {
+    const headerSet = new Set(headers.map(h => h.toLowerCase()));
+    const missingColumns = [];
+    
+    requiredColumns.forEach(col => {
+        if (!headerSet.has(col.toLowerCase())) {
+            missingColumns.push(col);
+        }
+    });
+    
+    return {
+        isValid: missingColumns.length === 0,
+        missingColumns: missingColumns
+    };
+}
+
+// Get column index from headers array
+function getColumnIndex(headers, columnName) {
+    const lowerName = columnName.toLowerCase();
+    return headers.findIndex(h => h.toLowerCase() === lowerName);
+}
+
+// Validate individual row data
+function validateRowData(rowData, uniqueFieldTracker) {
+    // Check required fields from product_1 schema
+    const requiredFields = ['EFTREFNUMBER', 'CRACCOUNTTITLE', 'CRACCOUNTTYPE', 'CRACCOUNTNO', 'CRROUTINGNO', 'CRAMOUNT', 'BENEFICIARY_ID', 'MOBILE'];
+    
+    for (const field of requiredFields) {
+        if (!rowData[field] || rowData[field].toString().trim() === '') {
+            return {
+                isValid: false,
+                error: `Missing required field: ${field}`
+            };
+        }
+    }
+    
+    // Validate CRAMOUNT is a number
+    if (isNaN(parseFloat(rowData['CRAMOUNT']))) {
+        return {
+            isValid: false,
+            error: 'CRAMOUNT must be a valid number'
+        };
+    }
+    
+    // Validate CRAMOUNT is positive
+    if (parseFloat(rowData['CRAMOUNT']) <= 0) {
+        return {
+            isValid: false,
+            error: 'CRAMOUNT must be greater than 0'
+        };
+    }
+    
+    // Validate MOBILE format (basic validation)
+    if (!/^[0-9+\-\s()]+$/.test(rowData['MOBILE'])) {
+        return {
+            isValid: false,
+            error: 'MOBILE must contain only numbers and valid phone characters'
+        };
+    }
+    
+    // Check for duplicates in unique fields (only if tracker is provided)
+    if (uniqueFieldTracker) {
+        const uniqueFields = ['EFTREFNUMBER', 'CRACCOUNTNO', 'BENEFICIARY_ID', 'NID_NO'];
+        
+        for (const field of uniqueFields) {
+            const value = rowData[field];
+            
+            // Skip NID_NO if empty (it's optional)
+            if (field === 'NID_NO' && !value) {
+                continue;
+            }
+            
+            if (value && uniqueFieldTracker[field].has(value)) {
+                return {
+                    isValid: false,
+                    error: `Duplicate ${field}: "${value}" already exists in this batch`
+                };
+            }
+            
+            if (value) {
+                uniqueFieldTracker[field].add(value);
+            }
+        }
+    }
+    
+    return { isValid: true };
+}
+
+// Generate validation report object
+function generateValidationReport(validRows, invalidRows, totalRows) {
+    return {
+        totalRows: totalRows,
+        validRows: validRows.length,
+        invalidRows: invalidRows.length,
+        successRate: ((validRows.length / totalRows) * 100).toFixed(2),
+        errors: invalidRows
+    };
+}
+
+// Format file size for display
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+}
+
+// Get required CSV columns - based on product_1 database schema
+function getRequiredCSVColumns() {
+    return ['EFTREFNUMBER', 'CRACCOUNTTITLE', 'CRACCOUNTTYPE', 'CRACCOUNTNO', 'CRROUTINGNO', 'CRAMOUNT', 'BENEFICIARY_ID', 'MOBILE'];
+}
+
+// Get optional CSV columns - based on product_1 database schema
+function getOptionalCSVColumns() {
+    return ['NID_NO', 'MIN_CODE', 'DEPT_CODE', 'PAYMENT_CYCLE_NAME_EN', 'SCHEME_CODE'];
 }
