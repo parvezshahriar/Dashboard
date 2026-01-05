@@ -13,4 +13,4 @@ sys.path.insert(0, backend_dir)
 # Run uvicorn
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("jwt:app", host="127.0.0.1", port=8000, reload=False)
+    uvicorn.run("jwt:app", host="127.0.0.1", port=8000, reload=True)
